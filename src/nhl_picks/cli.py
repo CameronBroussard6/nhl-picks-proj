@@ -4,6 +4,14 @@ from datetime import datetime
 import pandas as pd
 
 from .data_sources import fetch_bundle
+from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
+
+# choose slate: if it's after 11pm Central, use tomorrow; else today
+now_ct = datetime.now(ZoneInfo("America/Chicago"))
+slate_date = now_ct.date() if now_ct.hour < 23 else (now_ct + timedelta(days=1)).date()
+games_date = slate_date.isoformat()
+
 from .transforms import stabilize_rates
 from .projectors import expected_toi, sog_projection, points_projection, first_goal_projection
 from .report import write_site
