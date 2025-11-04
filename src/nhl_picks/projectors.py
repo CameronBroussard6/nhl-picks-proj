@@ -22,22 +22,42 @@ def pace_factor(team_rates: pd.DataFrame, team_a: str, team_b: str, use_geo=True
         return float(np.sqrt((a/lg) * (b/lg)))
     return float((a/lg + b/lg)/2.0)
 
-def sog_projection(player_star: pd.DataFrame, toi_df: pd.DataFrame, team_rates: pd.DataFrame, teams_opp: dict, use_geo=True) -> pd.DataFrame:
+def sog_projection(player_star: pd.DataFrame, toi_df: pd.DataFrame, team_rates: pd.DataFrame,
+                   teams_opp: dict, use_geo=True, prob_threshold: int = 3) -> pd.DataFrame:
+    """
+    Builds SOG mean (mu) and Prob[SOG >= prob_threshold] for each player.
+    'prob_threshold=3' corresponds to Over 2.5.
+    """
+    from .models import prob_at_least  # Poisson tail
     df = player_star.merge(toi_df, on='player_id', how='left')
     rows = []
     lg_sog_against = float(team_rates['ev_sog_against60'].mean())
     lg_pk_sog_against = float(team_rates['pk_sog_against60'].mean())
+
     for _, r in df.iterrows():
         team = r['team']
-        opp = teams_opp.get(team, None)
-        if opp is None: 
+        opp = teams_opp.get(team)
+        if not opp:
             continue
         pf = pace_factor(team_rates, team, opp, use_geo)
-        opp_ev = float(team_rates.loc[team_rates.team==opp,'ev_sog_against60'])
-        opp_pk = float(team_rates.loc[team_rates.team==opp,'pk_sog_against60'])
-        mu = r['ev_sog60_star']*(r['exp_toi_ev']/60.0)*pf*(opp_ev/lg_sog_against)            + r['pp_sog60_star']*(r['exp_toi_pp']/60.0)*(opp_pk/lg_pk_sog_against)
-        rows.append({"player_id": r['player_id'], "team": team, "opp": opp, "proj_sog_mean": max(0.01, mu)})
+        opp_ev = float(team_rates.loc[team_rates.team == opp, 'ev_sog_against60'])
+        opp_pk = float(team_rates.loc[team_rates.team == opp, 'pk_sog_against60'])
+
+        mu = r['ev_sog60_star'] * (r['exp_toi_ev'] / 60.0) * pf * (opp_ev / lg_sog_against) \
+           + r['pp_sog60_star'] * (r['exp_toi_pp'] / 60.0) * (opp_pk / lg_pk_sog_against)
+
+        mu = max(0.01, mu)
+        # Prob[SOG >= prob_threshold]
+        # prob_at_least expects k+.5; for >=3 we pass 2.5
+        prob_over = prob_at_least(prob_threshold - 0.5, mu)
+
+        rows.append({
+            "player_id": r['player_id'], "team": team, "opp": opp,
+            "proj_sog_mean": mu,
+            "prob_over": float(prob_over)
+        })
     return pd.DataFrame(rows)
+
 
 def points_projection(player_star: pd.DataFrame, toi_df: pd.DataFrame, team_rates: pd.DataFrame, goalies: pd.DataFrame, teams_opp: dict, beta_gsax: float, use_geo=True) -> pd.DataFrame:
     df = player_star.merge(toi_df, on='player_id', how='left')
