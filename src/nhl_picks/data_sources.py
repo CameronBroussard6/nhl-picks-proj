@@ -75,7 +75,19 @@ def mock_bundle(games_date: str | None = None) -> DataBundle:
     return DataBundle(players, teams, lines, goalies, team_rates, player_rates)
 
 def fetch_bundle(use_mock: bool = True, games_date: str | None = None) -> DataBundle:
-    # TODO: add real adapters (NHL API / Natural Stat Trick / MoneyPuck / Daily Faceoff)
     if use_mock:
         return mock_bundle(games_date)
-    raise NotImplementedError("Real data sources not wired yet.")
+
+    from .adapters.nhl_api import fetch_daily
+    bundle = fetch_daily(games_date)
+    if bundle is None:
+        raise RuntimeError(f"No NHL games found for {games_date}")
+    return DataBundle(
+        players=bundle["players"],
+        teams=bundle["teams"],
+        lines=bundle["lines"],
+        goalies=bundle["goalies"],
+        team_rates=bundle["team_rates"],
+        player_rates=bundle["player_rates"],
+    )
+
