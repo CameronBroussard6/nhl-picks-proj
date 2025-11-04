@@ -34,7 +34,11 @@ def run_daily(cfg):
     player_star = stabilize_rates(players, bundle.player_rates, cfg['priors'], cfg['shrinkage'])
     toi_df = expected_toi(players, lines)
     opp_map = infer_pairs(bundle.teams)
-    sog_df = sog_projection(player_star, toi_df, team_rates, opp_map, cfg['pace']['use_geometric_mean'])
+    sog_df = sog_projection(
+    player_star, toi_df, team_rates, opp_map,
+    cfg['pace']['use_geometric_mean'],
+    prob_threshold=int(cfg['report'].get('sog_over_line', 3))
+)
     pts_df = points_projection(player_star, toi_df, team_rates, goalies, opp_map, cfg['goalie']['beta_gsax'], cfg['pace']['use_geometric_mean'])
     fgs_df = first_goal_projection(player_star, toi_df, team_rates, goalies, cfg['pace']['use_geometric_mean'])
     write_site(site_dir='site', site_title=cfg['publish']['site_title'], players=players, sog_df=sog_df, pts_df=pts_df, fgs_df=fgs_df, updated=datetime.utcnow().isoformat()+'Z', top_n=cfg['report']['top_n'])
