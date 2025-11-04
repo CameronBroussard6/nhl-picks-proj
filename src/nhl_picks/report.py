@@ -87,19 +87,20 @@ HTML_TMPL = Template("""
 </html>
 """)
 
-def _top_rows(players, df, cols, key, top_n):
-    # cols: (team, opp, valuecol)
+def _top_rows_sog(players, sog_df, top_n):
     pmap = players.set_index('player_id')['name'].to_dict()
-    s = df.sort_values(key, ascending=False).head(top_n)
+    s = sog_df.sort_values(['prob_over','proj_sog_mean'], ascending=False).head(top_n)
     rows = []
     for _, r in s.iterrows():
         rows.append({
             "name": pmap.get(r.player_id, r.player_id),
-            "team": getattr(r, cols[0]),
-            "opp": getattr(r, cols[1]) if cols[1] else "",
-            "value": float(getattr(r, cols[2])),
+            "team": r.team,
+            "opp": r.opp,
+            "mu": float(r.proj_sog_mean),
+            "prob": float(r.prob_over),
         })
     return rows
+
 
 def write_site(site_dir: str, site_title: str, players: pd.DataFrame,
                sog_df: pd.DataFrame, pts_df: pd.DataFrame, fgs_df: pd.DataFrame,
