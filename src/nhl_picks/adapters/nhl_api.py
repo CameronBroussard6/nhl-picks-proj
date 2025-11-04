@@ -6,10 +6,41 @@ from zoneinfo import ZoneInfo
 
 BASE = "https://statsapi.web.nhl.com/api/v1"
 
+import requests, math
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+BASE = "https://statsapi.web.nhl.com/api/v1"
+
+_session = None
+def _session_with_retries():
+    global _session
+    if _session is not None:
+        return _session
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "nhl-picks-bot/1.0 (+https://github.com)",  # polite UA
+        "Accept": "application/json",
+    })
+    retry = Retry(
+        total=6,                # up to 6 tries
+        backoff_factor=0.6,     # 0.6, 1.2, 2.4, ...
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET"]),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    _session = s
+    return s
+
 def _get(url, **params):
-    r = requests.get(url, params=params, timeout=30)
+    s = _session_with_retries()
+    r = s.get(url, params=params, timeout=20)
     r.raise_for_status()
     return r.json()
+
 
 def _season_for_date(d: str) -> str:
     # NHL season string like "20242025"
