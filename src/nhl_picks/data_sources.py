@@ -78,16 +78,26 @@ def fetch_bundle(use_mock: bool = True, games_date: str | None = None) -> DataBu
     if use_mock:
         return mock_bundle(games_date)
 
-    from .adapters.nhl_api import fetch_daily
-    bundle = fetch_daily(games_date)
-    if bundle is None:
-        raise RuntimeError(f"No NHL games found for {games_date}")
-    return DataBundle(
-        players=bundle["players"],
-        teams=bundle["teams"],
-        lines=bundle["lines"],
-        goalies=bundle["goalies"],
-        team_rates=bundle["team_rates"],
-        player_rates=bundle["player_rates"],
-    )
+    # Try live NHL.com; on any error, fall back to mock and mark a flag
+    try:
+        from .adapters.nhl_api import fetch_daily
+        b = fetch_daily(games_date)
+        if b is None:
+            raise RuntimeError(f"No NHL games found for {games_date}")
+        live = DataBundle(
+            players=b["players"],
+            teams=b["teams"],
+            lines=b["lines"],
+            goalies=b["goalies"],
+            team_rates=b["team_rates"],
+            player_rates=b["player_rates"],
+        )
+        # Attach a tiny attribute so CLI/report can show a banner
+        live._source_label = f"NHL.com live ({games_date})"
+        return live
+    except Exception as e:
+        # Fall back
+        mock = mock_bundle(games_date)
+        mock._source_label = f"MOCK DATA (live fetch failed: {type(e).__name__})"
+        return mock
 
