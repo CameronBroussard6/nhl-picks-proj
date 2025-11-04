@@ -30,6 +30,9 @@ HTML_TMPL = Template("""
 <body>
   <h1>{{ site_title }}</h1>
   <p class="sub">Last updated: {{ updated }}</p>
+  {% if notice %}
+    <p class="sub"><strong>Note:</strong> {{ notice }}</p>
+  {% endif %}
 
   <div class="section">
     <h2>Top Shots on Goal (SOG)</h2>
@@ -138,6 +141,7 @@ def write_site(
     updated: str,
     top_n: int = 10,
     sog_line: int = 3,
+    notice: str | None = None,
 ):
     """Write index.html + picks.json into site/"""
     os.makedirs(site_dir, exist_ok=True)
@@ -153,6 +157,7 @@ def write_site(
         sog_line=sog_line,
         pts1=pts1_rows,
         fgs=fgs_rows,
+        notice=notice,
     )
     with open(os.path.join(site_dir, "index.html"), "w", encoding="utf-8") as f:
         f.write(html)
@@ -164,6 +169,7 @@ def write_site(
         "top_sog":  sog_df.sort_values(['prob_over','proj_sog_mean'], ascending=False).head(top_n).to_dict(orient="records"),
         "top_points": pts_df.sort_values('prob_1p', ascending=False).head(top_n).to_dict(orient="records"),
         "top_fgs":   fgs_df.sort_values('prob_first_goal', ascending=False).head(top_n).to_dict(orient="records"),
+        "notice": notice,
     }
     with open(os.path.join(site_dir, "picks.json"), "w", encoding="utf-8") as f:
         json.dump(out, f, indent=2)
