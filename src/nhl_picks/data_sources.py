@@ -2,6 +2,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import pandas as pd
 
+from .adapters.slate_espn import fetch_slate
+from .adapters.moneypuck import (
+    load_money_puck, build_player_rates, build_team_rates, build_players_table
+)
+
 @dataclass
 class DataBundle:
     players: pd.DataFrame
@@ -13,15 +18,37 @@ class DataBundle:
     opp_map: dict
 
 def fetch_bundle(*, games_date: str, last_n: int = 7, w_recent: float = 0.55) -> DataBundle:
-    """Live NHL.com only."""
-    from .adapters.nhl_api import fetch_daily
-    d = fetch_daily(games_date, last_n=last_n, w_recent=w_recent)
+    slate = fetch_slate(games_date)  # ESPN
+    teams_df = slate["teams_df"]
+    opp_map  = slate["opp_map"]
+
+    skaters, teams = load_money_puck()  # MoneyPuck CSVs (season)
+    player_rates = build_player_rates(skaters, last_n=last_n, w_recent=w_recent)
+    team_rates   = build_team_rates(teams)
+
+    # Filter to only teams on the slate
+    team_set = set(teams_df["team"])
+    player_rates = player_rates[player_rates["team"].isin(team_set)].reset_index(drop=True)
+    team_rates   = team_rates[team_rates["team"].isin(team_set)].reset_index(drop=True)
+
+    # Players + placeholder lines/goalies (no starters from ESPN/MoneyPuck)
+    players = build_players_table(player_rates)
+    lines = players[["team", "player_id"]].copy()
+    lines["line"] = "NA"
+    lines["pp_unit"] = "none"
+
+    goalies = teams_df.copy()
+    goalies.columns = ["team"]
+    goalies["starter_name"] = ""
+    goalies["gsax60"] = 0.0
+    goalies["sv"] = 0.905
+
     return DataBundle(
-        players=d["players"],
-        teams=d["teams"],
-        lines=d["lines"],
-        goalies=d["goalies"],
-        team_rates=d["team_rates"],
-        player_rates=d["player_rates"],
-        opp_map=d["opp_map"],
+        players=players,
+        teams=teams_df,
+        lines=lines,
+        goalies=goalies,
+        team_rates=team_rates,
+        player_rates=player_rates,
+        opp_map=opp_map,
     )
