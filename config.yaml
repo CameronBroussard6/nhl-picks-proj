@@ -1,11 +1,20 @@
-# Toggle data source adapters
-data_sources:
-  use_mock: false         # set to false when you wire real fetchers
-  games_date: auto       # "auto" = today (UTC). Or fix like "2025-11-04".
-windows:
-  ev_minutes_min: 300    # minutes needed before trusting player-specific rates
-  pp_minutes_min: 60
-  roll_games: 10
+publish:
+  site_title: NHL Picks — Projections
+
+report:
+  top_n: 10
+  sog_over_line: 3
+
+nhl:
+  last_n: 7        # recent-window for blending (e.g., 5 or 7)
+  w_recent: 0.55   # weight on recent form in the blend [0..1]
+
+pace:
+  use_geometric_mean: true
+
+goalie:
+  beta_gsax: -0.35  # (kept for later; goalies are neutral in NHL.com flow)
+
 priors:
   sog_per60_forward: 7.2
   sog_per60_defense: 4.1
@@ -15,21 +24,7 @@ priors:
   a1_per60_defense: 0.5
   a2_per60_forward: 0.5
   a2_per60_defense: 0.3
+
 shrinkage:
-  tau_ev: 400            # minutes to half weight the prior
+  tau_ev: 400
   tau_pp: 120
-pace:
-  use_geometric_mean: true
-goalie:
-  beta_gsax: -0.35
-  default_gsax60: 0.0
-early_pp:
-  q_draw_first10: 0.18
-report:
-  top_n: 10
-  include_rationale: true
-  sog_over_line: 3          # "Prob ≥ 3" (i.e., Over 2.5). Change to 4 for Over 3.5, etc.
-publish:
-  branch: gh-pages
-  commit_message: "chore: daily nhl picks"
-  site_title: "Daily NHL Projections & Picks"
