@@ -23,6 +23,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -e .             # install our src/nhl_picks package
           python -m nhl_picks.cli --config config.yaml run-daily
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
