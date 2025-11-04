@@ -1,8 +1,8 @@
 from __future__ import annotations
+import os
+import json
 import pandas as pd
 from jinja2 import Template
-import os, json
-from datetime import datetime
 
 HTML_TMPL = Template("""
 <!doctype html>
@@ -12,15 +12,17 @@ HTML_TMPL = Template("""
   <title>{{ site_title }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
+    :root { --bg:#fff; --fg:#111; --muted:#666; --line:#e5e5e5; }
+    html,body { background: var(--bg); color: var(--fg); }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, sans-serif; margin: 24px; }
-    h1 { margin-bottom: 0.2rem; }
-    .sub { color: #555; margin-top: 0; }
+    h1 { margin-bottom: .25rem; }
+    .sub { color: var(--muted); margin-top: 0; }
     table { border-collapse: collapse; width: 100%; margin: 12px 0 28px 0; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f5f5f5; }
+    th, td { border: 1px solid var(--line); padding: 8px; text-align: left; }
+    th { background: #f7f7f7; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
     .section { margin-top: 28px; }
-    .foot { color: #777; font-size: 0.9rem; margin-top: 24px; }
+    .foot { color: var(--muted); font-size: .9rem; margin-top: 24px; }
     a { color: #0b6; text-decoration: none; }
     a:hover { text-decoration: underline; }
   </style>
@@ -51,16 +53,15 @@ HTML_TMPL = Template("""
     </table>
   </div>
 
-
   <div class="section">
     <h2>Top Points (1+) — by fair probability</h2>
     <table>
-      <thead><tr><th>Player</th><th>Team</th><th>Opp</th><th>Metric</th><th class="num">Value</th></tr></thead>
+      <thead><tr><th>Player</th><th>Team</th><th>Opp</th><th class="num">Pr(1+ point)</th></tr></thead>
       <tbody>
       {% for r in pts1 -%}
         <tr>
           <td>{{ r.name }}</td><td>{{ r.team }}</td><td>{{ r.opp }}</td>
-          <td>Pr(1+ point)</td><td class="num">{{ '%.3f'|format(r.value) }}</td>
+          <td class="num">{{ '%.3f'|format(r.value) }}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -70,12 +71,12 @@ HTML_TMPL = Template("""
   <div class="section">
     <h2>Top First Goalscorer — by probability</h2>
     <table>
-      <thead><tr><th>Player</th><th>Team</th><th>Metric</th><th class="num">Value</th></tr></thead>
+      <thead><tr><th>Player</th><th>Team</th><th class="num">Pr(First Goal)</th></tr></thead>
       <tbody>
       {% for r in fgs -%}
         <tr>
           <td>{{ r.name }}</td><td>{{ r.team }}</td>
-          <td>Pr(First Goal)</td><td class="num">{{ '%.4f'|format(r.value) }}</td>
+          <td class="num">{{ '%.4f'|format(r.value) }}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -87,9 +88,10 @@ HTML_TMPL = Template("""
 </html>
 """)
 
-def _top_rows_sog(players, sog_df, top_n):
+def _top_rows_sog(players: pd.DataFrame, sog_df: pd.DataFrame, top_n: int):
+    """Return rows with {name, team, opp, mu, prob} sorted by prob then mean."""
     pmap = players.set_index('player_id')['name'].to_dict()
-    s = sog_df.sort_values(['prob_over','proj_sog_mean'], ascending=False).head(top_n)
+    s = sog_df.sort_values(['prob_over', 'proj_sog_mean'], ascending=False).head(top_n)
     rows = []
     for _, r in s.iterrows():
         rows.append({
@@ -101,27 +103,66 @@ def _top_rows_sog(players, sog_df, top_n):
         })
     return rows
 
+def _top_rows_pts1(players: pd.DataFrame, pts_df: pd.DataFrame, top_n: int):
+    pmap = players.set_index('player_id')['name'].to_dict()
+    s = pts_df.sort_values('prob_1p', ascending=False).head(top_n)
+    rows = []
+    for _, r in s.iterrows():
+        rows.append({
+            "name": pmap.get(r.player_id, r.player_id),
+            "team": r.team,
+            "opp": r.opp,
+            "value": float(r.prob_1p),
+        })
+    return rows
 
-def write_site(site_dir: str, site_title: str, players: pd.DataFrame,
-               sog_df: pd.DataFrame, pts_df: pd.DataFrame, fgs_df: pd.DataFrame,
-               updated: str, top_n: int = 10):
+def _top_rows_fgs(players: pd.DataFrame, fgs_df: pd.DataFrame, top_n: int):
+    pmap = players.set_index('player_id')['name'].to_dict()
+    s = fgs_df.sort_values('prob_first_goal', ascending=False).head(top_n)
+    rows = []
+    for _, r in s.iterrows():
+        rows.append({
+            "name": pmap.get(r.player_id, r.player_id),
+            "team": r.team,
+            "value": float(r.prob_first_goal),
+        })
+    return rows
+
+def write_site(
+    site_dir: str,
+    site_title: str,
+    players: pd.DataFrame,
+    sog_df: pd.DataFrame,
+    pts_df: pd.DataFrame,
+    fgs_df: pd.DataFrame,
+    updated: str,
+    top_n: int = 10,
+    sog_line: int = 3,
+):
+    """Write index.html + picks.json into site/"""
     os.makedirs(site_dir, exist_ok=True)
 
-    sog_rows  = _top_rows(players, sog_df, ('team','opp','proj_sog_mean'), 'proj_sog_mean', top_n)
-    pts1_rows = _top_rows(players, pts_df, ('team','opp','prob_1p'),       'prob_1p',       top_n)
-    fgs_rows  = _top_rows(players, fgs_df, ('team',None,'prob_first_goal'), 'prob_first_goal', top_n)
+    sog_rows  = _top_rows_sog(players, sog_df, top_n)
+    pts1_rows = _top_rows_pts1(players, pts_df, top_n)
+    fgs_rows  = _top_rows_fgs(players, fgs_df, top_n)
 
-    html = HTML_TMPL.render(site_title=site_title, updated=updated,
-                            sog=sog_rows, pts1=pts1_rows, fgs=fgs_rows)
-
+    html = HTML_TMPL.render(
+        site_title=site_title,
+        updated=updated,
+        sog=sog_rows,
+        sog_line=sog_line,
+        pts1=pts1_rows,
+        fgs=fgs_rows,
+    )
     with open(os.path.join(site_dir, "index.html"), "w", encoding="utf-8") as f:
         f.write(html)
 
-    # JSON feed
+    # also dump a machine-readable file
     out = {
         "generated_at": updated,
-        "top_sog":   sog_df.sort_values('proj_sog_mean', ascending=False).head(top_n).to_dict(orient="records"),
-        "top_points":pts_df.sort_values('prob_1p',       ascending=False).head(top_n).to_dict(orient="records"),
+        "sog_line": sog_line,
+        "top_sog":  sog_df.sort_values(['prob_over','proj_sog_mean'], ascending=False).head(top_n).to_dict(orient="records"),
+        "top_points": pts_df.sort_values('prob_1p', ascending=False).head(top_n).to_dict(orient="records"),
         "top_fgs":   fgs_df.sort_values('prob_first_goal', ascending=False).head(top_n).to_dict(orient="records"),
     }
     with open(os.path.join(site_dir, "picks.json"), "w", encoding="utf-8") as f:
