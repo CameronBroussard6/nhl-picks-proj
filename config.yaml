@@ -1,6 +1,6 @@
 # Toggle data source adapters
 data_sources:
-  use_mock: true         # set to false when you wire real fetchers
+  use_mock: false         # set to false when you wire real fetchers
   games_date: auto       # "auto" = today (UTC). Or fix like "2025-11-04".
 windows:
   ev_minutes_min: 300    # minutes needed before trusting player-specific rates
