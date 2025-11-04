@@ -3,6 +3,7 @@ import argparse
 import os
 from datetime import datetime, timedelta
 
+import pandas as pd
 import yaml
 from zoneinfo import ZoneInfo
 
@@ -30,52 +31,64 @@ def choose_slate_date() -> str:
 
 def run_daily(cfg):
     games_date = choose_slate_date()
-
-    # fetch live bundle (NHL.com only)
-    bundle = fetch_bundle(
-        games_date=games_date,
-        last_n=int(cfg.get("nhl", {}).get("last_n", 7)),
-        w_recent=float(cfg.get("nhl", {}).get("w_recent", 0.55)),
-    )
-    notice = f"Slate date: {games_date} • Source: NHL.com live"
-
-    players = bundle.players
-    team_rates = bundle.team_rates
-    goalies = bundle.goalies
-    lines = bundle.lines
-    opp_map = bundle.opp_map  # <- real team→opponent mapping from schedule
-
-    # stabilize per-60 rates with priors
-    player_star = stabilize_rates(
-        players, bundle.player_rates, cfg["priors"], cfg["shrinkage"]
-    )
-
-    # forecast minutes
-    toi_df = expected_toi(players, lines)
-
-    # projections
     sog_over_line = int(cfg.get("report", {}).get("sog_over_line", 3))
-    sog_df = sog_projection(
-        player_star,
-        toi_df,
-        team_rates,
-        opp_map,
-        cfg["pace"]["use_geometric_mean"],
-        prob_threshold=sog_over_line,
-    )
-    pts_df = points_projection(
-        player_star,
-        toi_df,
-        team_rates,
-        goalies,
-        opp_map,
-        cfg["goalie"]["beta_gsax"],
-        cfg["pace"]["use_geometric_mean"],
-    )
-    fgs_df = first_goal_projection(
-        player_star, toi_df, team_rates, goalies, cfg["pace"]["use_geometric_mean"]
-    )
 
+    try:
+        # --- LIVE NHL.com ONLY ---
+        bundle = fetch_bundle(
+            games_date=games_date,
+            last_n=int(cfg.get("nhl", {}).get("last_n", 7)),
+            w_recent=float(cfg.get("nhl", {}).get("w_recent", 0.55)),
+        )
+        notice = f"Slate date: {games_date} • Source: NHL.com live"
+
+        players = bundle.players
+        team_rates = bundle.team_rates
+        goalies = bundle.goalies
+        lines = bundle.lines
+        opp_map = bundle.opp_map  # real team→opponent mapping
+
+        # stabilize per-60 rates with priors
+        player_star = stabilize_rates(
+            players, bundle.player_rates, cfg["priors"], cfg["shrinkage"]
+        )
+
+        # forecast minutes
+        toi_df = expected_toi(players, lines)
+
+        # projections
+        sog_df = sog_projection(
+            player_star,
+            toi_df,
+            team_rates,
+            opp_map,
+            cfg["pace"]["use_geometric_mean"],
+            prob_threshold=sog_over_line,
+        )
+        pts_df = points_projection(
+            player_star,
+            toi_df,
+            team_rates,
+            goalies,
+            opp_map,
+            cfg["goalie"]["beta_gsax"],
+            cfg["pace"]["use_geometric_mean"],
+        )
+        fgs_df = first_goal_projection(
+            player_star, toi_df, team_rates, goalies, cfg["pace"]["use_geometric_mean"]
+        )
+
+    except Exception as e:
+        # --- DEGRADED MODE: publish a page noting the live-fetch failure ---
+        err = f"{type(e).__name__}: {str(e)}"
+        notice = f"Slate date: {games_date} • Live NHL.com fetch FAILED ({err}). Showing no picks."
+        # empty tables, but still deploy the site so Pages stays up
+        players = pd.DataFrame(columns=["player_id", "name", "team"])
+        sog_df  = pd.DataFrame(columns=["player_id", "team", "opp", "proj_sog_mean", "prob_over"])
+        pts_df  = pd.DataFrame(columns=["player_id", "team", "opp", "prob_1p"])
+        fgs_df  = pd.DataFrame(columns=["player_id", "team", "prob_first_goal"])
+
+    # write site artifacts (works with either live data or empty frames)
     write_site(
         site_dir="site",
         site_title=cfg["publish"]["site_title"],
