@@ -3,9 +3,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .adapters.slate_espn import fetch_slate
-from .adapters.moneypuck import (
-    load_money_puck, build_player_rates, build_team_rates, build_players_table
-)
+from .adapters.moneypuck import load_money_puck, build_player_rates, build_team_rates, build_players_table
 
 @dataclass
 class DataBundle:
@@ -18,20 +16,19 @@ class DataBundle:
     opp_map: dict
 
 def fetch_bundle(*, games_date: str, last_n: int = 7, w_recent: float = 0.55) -> DataBundle:
-    slate = fetch_slate(games_date)  # ESPN
-    teams_df = slate["teams_df"]
-    opp_map  = slate["opp_map"]
+    slate = fetch_slate(games_date)                      # ESPN slate/opponents
+    skaters, teams = load_money_puck(games_date)         # MoneyPuck season folder for this date
 
-    skaters, teams = load_money_puck()  # MoneyPuck CSVs (season)
     player_rates = build_player_rates(skaters, last_n=last_n, w_recent=w_recent)
     team_rates   = build_team_rates(teams)
 
-    # Filter to only teams on the slate
+    # Filter to slate teams only
+    teams_df = slate["teams_df"]
+    opp_map  = slate["opp_map"]
     team_set = set(teams_df["team"])
     player_rates = player_rates[player_rates["team"].isin(team_set)].reset_index(drop=True)
     team_rates   = team_rates[team_rates["team"].isin(team_set)].reset_index(drop=True)
 
-    # Players + placeholder lines/goalies (no starters from ESPN/MoneyPuck)
     players = build_players_table(player_rates)
     lines = players[["team", "player_id"]].copy()
     lines["line"] = "NA"
