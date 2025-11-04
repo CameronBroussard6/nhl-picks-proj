@@ -23,6 +23,7 @@ HTML_TMPL = Template("""
     .num { text-align: right; font-variant-numeric: tabular-nums; }
     .section { margin-top: 28px; }
     .foot { color: var(--muted); font-size: .9rem; margin-top: 24px; }
+    .empty { color: var(--muted); font-style: italic; margin: 8px 0 24px; }
     a { color: #0b6; text-decoration: none; }
     a:hover { text-decoration: underline; }
   </style>
@@ -36,6 +37,9 @@ HTML_TMPL = Template("""
 
   <div class="section">
     <h2>Top Shots on Goal (SOG)</h2>
+    {% if sog|length == 0 %}
+      <p class="empty">No SOG picks available.</p>
+    {% else %}
     <table>
       <thead>
         <tr>
@@ -54,10 +58,14 @@ HTML_TMPL = Template("""
       {% endfor %}
       </tbody>
     </table>
+    {% endif %}
   </div>
 
   <div class="section">
     <h2>Top Points (1+) — by fair probability</h2>
+    {% if pts1|length == 0 %}
+      <p class="empty">No points picks available.</p>
+    {% else %}
     <table>
       <thead><tr><th>Player</th><th>Team</th><th>Opp</th><th class="num">Pr(1+ point)</th></tr></thead>
       <tbody>
@@ -69,10 +77,14 @@ HTML_TMPL = Template("""
       {% endfor %}
       </tbody>
     </table>
+    {% endif %}
   </div>
 
   <div class="section">
     <h2>Top First Goalscorer — by probability</h2>
+    {% if fgs|length == 0 %}
+      <p class="empty">No FGS picks available.</p>
+    {% else %}
     <table>
       <thead><tr><th>Player</th><th>Team</th><th class="num">Pr(First Goal)</th></tr></thead>
       <tbody>
@@ -84,6 +96,7 @@ HTML_TMPL = Template("""
       {% endfor %}
       </tbody>
     </table>
+    {% endif %}
   </div>
 
   <p class="foot">JSON feed: <a href="./picks.json">picks.json</a></p>
@@ -91,43 +104,50 @@ HTML_TMPL = Template("""
 </html>
 """)
 
+def _safe_top(df: pd.DataFrame, sort_cols, ascending=False, n=10):
+    if df is None or df.empty:
+        return pd.DataFrame()
+    cols = [c for c in sort_cols if c in df.columns]
+    if not cols:
+        return df.head(n)
+    return df.sort_values(cols, ascending=ascending).head(n)
+
 def _top_rows_sog(players: pd.DataFrame, sog_df: pd.DataFrame, top_n: int):
-    """Return rows with {name, team, opp, mu, prob} sorted by prob then mean."""
-    pmap = players.set_index('player_id')['name'].to_dict()
-    s = sog_df.sort_values(['prob_over', 'proj_sog_mean'], ascending=False).head(top_n)
+    pmap = players.set_index('player_id')['name'].to_dict() if not players.empty else {}
+    s = _safe_top(sog_df, ['prob_over', 'proj_sog_mean'], ascending=False, n=top_n)
     rows = []
     for _, r in s.iterrows():
         rows.append({
-            "name": pmap.get(r.player_id, r.player_id),
-            "team": r.team,
-            "opp": r.opp,
-            "mu": float(r.proj_sog_mean),
-            "prob": float(r.prob_over),
+            "name": pmap.get(r.get('player_id'), r.get('player_id', '')),
+            "team": r.get('team',''),
+            "opp": r.get('opp',''),
+            "mu": float(r.get('proj_sog_mean', 0.0)),
+            "prob": float(r.get('prob_over', 0.0)),
         })
     return rows
 
 def _top_rows_pts1(players: pd.DataFrame, pts_df: pd.DataFrame, top_n: int):
-    pmap = players.set_index('player_id')['name'].to_dict()
-    s = pts_df.sort_values('prob_1p', ascending=False).head(top_n)
+    pmap = players.set_index('player_id')['name'].to_dict() if not players.empty else {}
+    s = _safe_top(pts_df, ['prob_1p'], ascending=False, n=top_n)
     rows = []
     for _, r in s.iterrows():
         rows.append({
-            "name": pmap.get(r.player_id, r.player_id),
-            "team": r.team,
-            "opp": r.opp,
-            "value": float(r.prob_1p),
+            "name": pmap.get(r.get('player_id'), r.get('player_id', '')),
+            "team": r.get('team',''),
+            "opp": r.get('opp',''),
+            "value": float(r.get('prob_1p', 0.0)),
         })
     return rows
 
 def _top_rows_fgs(players: pd.DataFrame, fgs_df: pd.DataFrame, top_n: int):
-    pmap = players.set_index('player_id')['name'].to_dict()
-    s = fgs_df.sort_values('prob_first_goal', ascending=False).head(top_n)
+    pmap = players.set_index('player_id')['name'].to_dict() if not players.empty else {}
+    s = _safe_top(fgs_df, ['prob_first_goal'], ascending=False, n=top_n)
     rows = []
     for _, r in s.iterrows():
         rows.append({
-            "name": pmap.get(r.player_id, r.player_id),
-            "team": r.team,
-            "value": float(r.prob_first_goal),
+            "name": pmap.get(r.get('player_id'), r.get('player_id', '')),
+            "team": r.get('team',''),
+            "value": float(r.get('prob_first_goal', 0.0)),
         })
     return rows
 
@@ -143,7 +163,6 @@ def write_site(
     sog_line: int = 3,
     notice: str | None = None,
 ):
-    """Write index.html + picks.json into site/"""
     os.makedirs(site_dir, exist_ok=True)
 
     sog_rows  = _top_rows_sog(players, sog_df, top_n)
@@ -162,13 +181,12 @@ def write_site(
     with open(os.path.join(site_dir, "index.html"), "w", encoding="utf-8") as f:
         f.write(html)
 
-    # also dump a machine-readable file
     out = {
         "generated_at": updated,
         "sog_line": sog_line,
-        "top_sog":  sog_df.sort_values(['prob_over','proj_sog_mean'], ascending=False).head(top_n).to_dict(orient="records"),
-        "top_points": pts_df.sort_values('prob_1p', ascending=False).head(top_n).to_dict(orient="records"),
-        "top_fgs":   fgs_df.sort_values('prob_first_goal', ascending=False).head(top_n).to_dict(orient="records"),
+        "top_sog":  (sog_df if sog_df is not None else pd.DataFrame()).to_dict(orient="records"),
+        "top_points": (pts_df if pts_df is not None else pd.DataFrame()).to_dict(orient="records"),
+        "top_fgs":   (fgs_df if fgs_df is not None else pd.DataFrame()).to_dict(orient="records"),
         "notice": notice,
     }
     with open(os.path.join(site_dir, "picks.json"), "w", encoding="utf-8") as f:
