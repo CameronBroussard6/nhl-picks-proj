@@ -28,6 +28,7 @@ early_pp:
 report:
   top_n: 10
   include_rationale: true
+  sog_over_line: 3          # "Prob ≥ 3" (i.e., Over 2.5). Change to 4 for Over 3.5, etc.
 publish:
   branch: gh-pages
   commit_message: "chore: daily nhl picks"
