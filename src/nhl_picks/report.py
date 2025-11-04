@@ -30,19 +30,27 @@ HTML_TMPL = Template("""
   <p class="sub">Last updated: {{ updated }}</p>
 
   <div class="section">
-    <h2>Top Shots on Goal (SOG) — by projected mean</h2>
+    <h2>Top Shots on Goal (SOG)</h2>
     <table>
-      <thead><tr><th>Player</th><th>Team</th><th>Opp</th><th>Metric</th><th class="num">Value</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Player</th><th>Team</th><th>Opp</th>
+          <th class="num">Projected SOG (mean)</th>
+          <th class="num">Prob ≥ {{ sog_line }}</th>
+        </tr>
+      </thead>
       <tbody>
       {% for r in sog -%}
         <tr>
           <td>{{ r.name }}</td><td>{{ r.team }}</td><td>{{ r.opp }}</td>
-          <td>SOG mean</td><td class="num">{{ '%.3f'|format(r.value) }}</td>
+          <td class="num">{{ '%.3f'|format(r.mu) }}</td>
+          <td class="num">{{ '%.1f%%'|format(100*r.prob) }}</td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
+
 
   <div class="section">
     <h2>Top Points (1+) — by fair probability</h2>
