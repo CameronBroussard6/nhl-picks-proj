@@ -24,13 +24,15 @@ def _session() -> requests.Session:
     return s
 
 def _proxy_url(url: str) -> str:
-    # Route through r.jina.ai proxy if direct fetch fails
-    # Works with both http and https targets.
+    # r.jina.ai expects the ORIGINAL scheme after the slash.
+    # e.g., https://r.jina.ai/https://example.com/path?x=1
     if url.startswith("https://"):
-        return "https://r.jina.ai/http://" + url[len("https://"):]
+        return "https://r.jina.ai/https://" + url[len("https://"):]
     if url.startswith("http://"):
         return "https://r.jina.ai/http://" + url[len("http://"):]
-    return "https://r.jina.ai/http://" + url
+    # default to https scheme if missing
+    return "https://r.jina.ai/https://" + url
+
 
 def get_json(url: str, params: Optional[Dict[str, Any]] = None, timeout: int = 25) -> Any:
     s = _session()
