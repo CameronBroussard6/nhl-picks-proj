@@ -8,8 +8,7 @@ on:
         required: false
         default: ""
   schedule:
-    # 10:00 UTC daily (adjust if you want)
-    - cron: "0 10 * * *"
+    - cron: "0 10 * * *"   # 10:00 UTC daily
 
 permissions:
   contents: read
@@ -27,6 +26,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       SITE_DIR: site
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,12 +37,18 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install package
+      # ✅ Install runtime dependencies explicitly (fixes ModuleNotFoundError: pandas)
+      - name: Install runtime deps
         run: |
           python -m pip install --upgrade pip
+          pip install "pandas>=2.1" "requests>=2.31" "jinja2>=3.1"
+
+      # Install your package (editable) after deps so imports work
+      - name: Install package
+        run: |
           python -m pip install -e .
 
-      # ---------- Smoke test: prints teams/players/rates to the CI logs ----------
+      # Optional smoke test so you can see live data in logs
       - name: Smoke test live fetch
         env:
           GAMES_DATE: ${{ github.event.inputs.games_date }}
@@ -52,9 +58,9 @@ jobs:
             GAMES_DATE=$(date -u +%F)
           fi
           echo "Using GAMES_DATE=$GAMES_DATE"
-          python scripts/smoke_test.py || true  # don't fail the job on smoke test
+          # Don't fail build if smoke test prints nothing; it's just for visibility
+          python scripts/smoke_test.py || true
 
-      # ---------- Build site ----------
       - name: Build site
         env:
           GAMES_DATE: ${{ github.event.inputs.games_date }}
@@ -66,18 +72,15 @@ jobs:
           rm -rf "$SITE_DIR"
           mkdir -p "$SITE_DIR"
 
-          # Generate JSON + HTML into $SITE_DIR
           python -m nhl_picks.cli \
             --date "$GAMES_DATE" \
             --out "$SITE_DIR" \
             --last-n 5 \
             --w-recent 0.65
 
-          # List outputs for debugging
           echo "---- built files ----"
           find "$SITE_DIR" -maxdepth 2 -type f -print
 
-      # ---------- Upload + Deploy GitHub Pages ----------
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
