@@ -37,18 +37,17 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      # ✅ Install runtime dependencies explicitly (fixes ModuleNotFoundError: pandas)
+      # Install runtime dependencies (added PyYAML here)
       - name: Install runtime deps
         run: |
           python -m pip install --upgrade pip
-          pip install "pandas>=2.1" "requests>=2.31" "jinja2>=3.1"
+          pip install "pandas>=2.1" "requests>=2.31" "jinja2>=3.1" "pyyaml>=6.0.1"
 
-      # Install your package (editable) after deps so imports work
       - name: Install package
         run: |
           python -m pip install -e .
 
-      # Optional smoke test so you can see live data in logs
+      # Optional smoke test: prints sample rows to logs
       - name: Smoke test live fetch
         env:
           GAMES_DATE: ${{ github.event.inputs.games_date }}
@@ -58,7 +57,6 @@ jobs:
             GAMES_DATE=$(date -u +%F)
           fi
           echo "Using GAMES_DATE=$GAMES_DATE"
-          # Don't fail build if smoke test prints nothing; it's just for visibility
           python scripts/smoke_test.py || true
 
       - name: Build site
