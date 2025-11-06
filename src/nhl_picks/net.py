@@ -11,9 +11,14 @@ UA = "nhl-picks/1.0 (+https://github.com)"
 
 def _session() -> requests.Session:
     s = requests.Session()
-    s.headers.update({"User-Agent": UA})
+    s.headers.update({
+        "User-Agent": UA,
+        "Accept": "application/json, text/csv;q=0.9, */*;q=0.1",
+    })
     retry = Retry(
-        total=5,
+        total=6,
+        connect=6,
+        read=6,
         backoff_factor=0.7,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset(["GET"]),
@@ -24,40 +29,37 @@ def _session() -> requests.Session:
     return s
 
 def _proxy_url(url: str) -> str:
-    # r.jina.ai expects the ORIGINAL scheme after the slash.
-    # e.g., https://r.jina.ai/https://example.com/path?x=1
+    # r.jina.ai expects the original scheme after the slash.
     if url.startswith("https://"):
         return "https://r.jina.ai/https://" + url[len("https://"):]
     if url.startswith("http://"):
         return "https://r.jina.ai/http://" + url[len("http://"):]
-    # default to https scheme if missing
     return "https://r.jina.ai/https://" + url
 
-
-def get_json(url: str, params: Optional[Dict[str, Any]] = None, timeout: int = 25) -> Any:
+def get_json(url: str, *, params: Optional[Dict[str, Any]] = None, timeout: int = 25, allow_proxy: bool = True) -> Any:
     s = _session()
-    # 1) try direct
-    try:
-        r = s.get(url, params=params, timeout=timeout)
-        r.raise_for_status()
+    # 1) direct
+    r = s.get(url, params=params, timeout=timeout)
+    if r.ok:
         return r.json()
-    except Exception:
-        # 2) try proxy
-        r = s.get(_proxy_url(url), params=params, timeout=timeout)
-        r.raise_for_status()
-        return r.json()
+    # 2) optional proxy fallback
+    if allow_proxy:
+        rp = s.get(_proxy_url(url), params=params, timeout=timeout)
+        rp.raise_for_status()
+        return rp.json()
+    r.raise_for_status()
 
-def get_bytes(url: str, params: Optional[Dict[str, Any]] = None, timeout: int = 30) -> bytes:
+def get_bytes(url: str, *, params: Optional[Dict[str, Any]] = None, timeout: int = 30, allow_proxy: bool = True) -> bytes:
     s = _session()
-    try:
-        r = s.get(url, params=params, timeout=timeout)
-        r.raise_for_status()
+    r = s.get(url, params=params, timeout=timeout)
+    if r.ok:
         return r.content
-    except Exception:
-        r = s.get(_proxy_url(url), params=params, timeout=timeout)
-        r.raise_for_status()
-        return r.content
+    if allow_proxy:
+        rp = s.get(_proxy_url(url), params=params, timeout=timeout)
+        rp.raise_for_status()
+        return rp.content
+    r.raise_for_status()
 
-def read_csv_safely(url: str, params: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
-    data = get_bytes(url, params=params)
+def read_csv_safely(url: str, *, params: Optional[Dict[str, Any]] = None, allow_proxy: bool = True) -> pd.DataFrame:
+    data = get_bytes(url, params=params, allow_proxy=allow_proxy)
     return pd.read_csv(io.BytesIO(data))
