@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .adapters.slate_espn import fetch_slate
-from .adapters.moneypuck import load_money_puck, build_player_rates, build_team_rates, build_players_table
+from .adapters.nhl_stats import build_bundle_for_slate
 
 @dataclass
 class DataBundle:
@@ -16,29 +16,19 @@ class DataBundle:
     opp_map: dict
 
 def fetch_bundle(*, games_date: str, last_n: int = 7, w_recent: float = 0.55) -> DataBundle:
-    slate = fetch_slate(games_date)                      # ESPN slate/opponents
-    skaters, teams = load_money_puck(games_date)         # MoneyPuck season folder for this date
-
-    player_rates = build_player_rates(skaters, last_n=last_n, w_recent=w_recent)
-    team_rates   = build_team_rates(teams)
-
-    # Filter to slate teams only
+    slate = fetch_slate(games_date)              # ESPN slate & opponent map
     teams_df = slate["teams_df"]
     opp_map  = slate["opp_map"]
-    team_set = set(teams_df["team"])
-    player_rates = player_rates[player_rates["team"].isin(team_set)].reset_index(drop=True)
-    team_rates   = team_rates[team_rates["team"].isin(team_set)].reset_index(drop=True)
+    slate_teams = teams_df["team"].tolist()
 
-    players = build_players_table(player_rates)
-    lines = players[["team", "player_id"]].copy()
-    lines["line"] = "NA"
-    lines["pp_unit"] = "none"
+    players, lines, player_rates, team_rates, goalies = build_bundle_for_slate(
+        games_date, slate_teams, last_n=last_n, w_recent=w_recent
+    )
 
-    goalies = teams_df.copy()
-    goalies.columns = ["team"]
-    goalies["starter_name"] = ""
-    goalies["gsax60"] = 0.0
-    goalies["sv"] = 0.905
+    # Keep only players on slate teams (defensive)
+    players = players[players["team"].isin(slate_teams)].reset_index(drop=True)
+    player_rates = player_rates[player_rates["team"].isin(slate_teams)].reset_index(drop=True)
+    team_rates = team_rates[team_rates["team"].isin(slate_teams)].reset_index(drop=True)
 
     return DataBundle(
         players=players,
