@@ -37,7 +37,6 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      # Install runtime dependencies (added PyYAML here)
       - name: Install runtime deps
         run: |
           python -m pip install --upgrade pip
@@ -47,7 +46,7 @@ jobs:
         run: |
           python -m pip install -e .
 
-      # Optional smoke test: prints sample rows to logs
+      # Optional smoke test
       - name: Smoke test live fetch
         env:
           GAMES_DATE: ${{ github.event.inputs.games_date }}
@@ -70,11 +69,18 @@ jobs:
           rm -rf "$SITE_DIR"
           mkdir -p "$SITE_DIR"
 
-          python -m nhl_picks.cli \
-            --date "$GAMES_DATE" \
-            --out "$SITE_DIR" \
-            --last-n 5 \
-            --w-recent 0.65
+          # Create minimal config file expected by the CLI
+          cat > cfg.yml <<'EOF'
+          date: "__DATE__"
+          last_n: 5
+          w_recent: 0.65
+          out_dir: "__OUT__"
+          EOF
+          sed -i "s|__DATE__|$GAMES_DATE|g" cfg.yml
+          sed -i "s|__OUT__|$SITE_DIR|g" cfg.yml
+
+          # Correct invocation: use subcommand 'run-daily' with --config
+          python -m nhl_picks.cli run-daily --config cfg.yml
 
           echo "---- built files ----"
           find "$SITE_DIR" -maxdepth 2 -type f -print
