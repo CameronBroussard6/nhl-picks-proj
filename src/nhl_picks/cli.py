@@ -40,7 +40,7 @@ def run_daily(cfg):
             last_n=int(cfg.get("nhl", {}).get("last_n", 7)),
             w_recent=float(cfg.get("nhl", {}).get("w_recent", 0.55)),
         )
-        notice = f"Slate date: {games_date} • Source: ESPN + MoneyPuck (live)"
+        notice = f"Slate date: {games_date} • Source: ESPN (slate) + NHL Stats API (live)"
 
 
         players = bundle.players
@@ -82,7 +82,7 @@ def run_daily(cfg):
     except Exception as e:
         # --- DEGRADED MODE: publish a page noting the live-fetch failure ---
         err = f"{type(e).__name__}: {str(e)}"
-        notice = f"Slate date: {games_date} • Live ESPN/MoneyPuck fetch FAILED ({err}). Showing no picks."
+        notice = f"Slate date: {games_date} • Live ESPN/NHL Stats fetch FAILED ({err}). Showing no picks."
         # empty tables, but still deploy the site so Pages stays up
         players = pd.DataFrame(columns=["player_id", "name", "team"])
         sog_df  = pd.DataFrame(columns=["player_id", "team", "opp", "proj_sog_mean", "prob_over"])
